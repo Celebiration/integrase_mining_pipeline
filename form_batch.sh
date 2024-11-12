@@ -1,0 +1,2 @@
+echo -n > batch_run.txt
+sed '1d' /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/refseq_bacteria_assembly_summary.tsv|awk -v FS="\t" '{print $7}'|sort -n|uniq|xargs -I'{}' echo "/Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/run_int_att_pipeline -d /Yol_Data/NCBI/MAG/Bacteria/refseq -s {} -o /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/run" >> batch_run.txt

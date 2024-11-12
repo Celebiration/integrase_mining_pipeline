@@ -1,0 +1,78 @@
+import pandas as pd
+import numpy as np
+import os
+import sys
+
+configfile: "/Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/configs/config.yaml"
+species=int(config["species_taxid"])
+max_ref_num=int(config["max_ref_num"])
+output_dir=config["output_dir"]
+mapping=pd.read_csv('/Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/refseq_bacteria_assembly_summary.tsv',sep='\t')
+
+genomes=[i.split('/')[-1] for i in list(mapping.loc[mapping['species_taxid']==species,'ftp_path'])]
+c1=list(mapping.loc[mapping['species_taxid']==species,'refseq_category'])
+c2=list(mapping.loc[mapping['species_taxid']==species,'assembly_level'])
+int_genomes=[i for i in genomes if os.path.exists(output_dir+"/out/"+str(species)+"/"+i+"/recombinases.txt")]
+
+if len(int_genomes)==0:
+    raise ValueError("Not analyzing mges because no recombinase is found. Exiting.")
+
+v1={'reference genome':3,'representative genome':2,'na':0}
+v2={'Complete Genome':3,'Chromosome':2,'Scaffold':1,'Contig':0}
+v=[v1.get(c1[i],0)+v2.get(c2[i],0) for i in range(len(c1))]
+vv=[genomes[i] for i in sorted(range(len(v)),key=lambda k:v[k],reverse=True)]
+def decide_refs(genome,max_ref_num):
+    vvv=[i for i in vv if i != genome]
+    return(vvv[:max_ref_num])
+
+rule all:
+    input:
+        output_dir+'/results/'+str(species)+".raw_results.tsv"
+
+rule mgefinder:
+    input:
+        ref="{ref_genome}_genomic.fna",
+        query="{query_genome}_genomic.fna"
+    output:
+        output_dir+"/out/"+str(species)+"/{query_genome}/mgefinder_{ref_genome}.find.tsv",
+        output_dir+"/out/"+str(species)+"/{query_genome}/mgefinder_{ref_genome}.inferseq.tsv",
+        output_dir+"/out/"+str(species)+"/{query_genome}/mgefinder_{ref_genome}.pair.tsv"
+    log:
+        output_dir+"/log/"+str(species)+"/{query_genome}__{ref_genome}.mgefinder.log.txt"
+    params:
+        output_dir+"/out/"+str(species)+"/{query_genome}/mgefinder_{ref_genome}"
+    threads: 4
+    shell:
+        """
+        source activate mgefinder
+        mgefinder wholegenome -rl 1000 \
+            -id {wildcards.query_genome}__{wildcards.ref_genome} \
+            -o {params} \
+            {input.ref} \
+            {input.query} > {log} 2>&1
+        conda deactivate
+        """
+
+rule summarize:
+    input:
+        recombinases=output_dir+"/out/"+str(species)+"/{query_genome}/recombinases.txt",
+        refs=lambda wildcards: expand(output_dir+"/out/"+str(species)+"/"+f"{wildcards.query_genome}"+"/mgefinder_{ref_genome}.inferseq.tsv",ref_genome=decide_refs(f"{wildcards.query_genome}",max_ref_num))
+    output:
+        output_dir+"/out/"+str(species)+"/{query_genome}/recombinases_att_results.tsv"
+    log:
+        output_dir+"/log/"+str(species)+"/{query_genome}_summarize.log.txt"
+    shell:
+        """
+        /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/scripts/summarize_recombinase.R {output} {input.recombinases} {input.refs}
+        """
+
+rule combine_summaries:
+    input:
+        [output_dir+"/out/"+str(species)+"/"+i+"/recombinases_att_results.tsv" for i in int_genomes]
+    output:
+        output_dir+'/results/'+str(species)+".raw_results.tsv"
+    shell:
+        """
+        echo -e \"seqid\tstart\tend\tstrand\tseq_len\tquery_name\tE-value\tscore\tbias\tprotein\tsample\tpair_id\tmethod\tstart_ins\tend_ins\tinferred_seq_length\tinferred_seq\" > {output}
+        for i in {input};do sed '1d' $i >> {output};done
+        """

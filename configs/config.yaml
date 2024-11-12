@@ -1,0 +1,4 @@
+species_taxid: 24
+output_dir: "/Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/test"
+hmm_file: "/Yol_Data/resources/int.hmm"
+max_ref_num: 20

@@ -1,0 +1,27 @@
+#!/usr/bin/bash
+
+threads=16
+
+Usage()
+{
+    echo "run_int_att_pipeline -d {dir} -s {species_taxid} -o {output_dir(absolute)} -t {threads: 16}"
+}
+
+while getopts ':d:s:o:t:' OPT; do
+    case $OPT in
+        d) wkdir="$OPTARG";;
+        s) species="$OPTARG";;
+        o) output_dir="$OPTARG";;
+        t) threads="$OPTARG";;
+        *) Usage; exit 1;;
+    esac
+done
+if [ -z $wkdir ];then Usage; exit 1; fi
+if [ -z $species ];then Usage; exit 1; fi
+if [ -z $output_dir ];then Usage; exit 1; fi
+
+mkdir -p ${output_dir}/pipeline_log
+snakemake -s /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/snakefile -d $wkdir --cores ${threads} -p --config species_taxid=${species} output_dir=${output_dir} >> ${output_dir}/pipeline_log/${species}.int_att_pipeline.nohup.out 2>&1
+snakemake -s /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/snakefile_att -d $wkdir --cores ${threads} -p --config species_taxid=${species} output_dir=${output_dir} >> ${output_dir}/pipeline_log/${species}.int_att_pipeline.nohup.out 2>&1
+rm_index=`awk -v FS="\t" -v ss=${species} '{if ($7 == ss) print $1}' /Yol_Data/NCBI/MAG/Bacteria/refseq_wkdir/refseq_bacteria_assembly_summary.tsv`
+for item in $rm_index;do ls /Yol_Data/NCBI/MAG/Bacteria/refseq/${item}* |grep -P "(bt2$)|(amb$)|(ann$)|(bwt$)|(pac$)|(sa$)"|xargs rm -f;done
